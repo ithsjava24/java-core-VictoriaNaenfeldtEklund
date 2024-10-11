@@ -1,18 +1,12 @@
 package org.example.warehouse;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
 
-/**
- *  - Has no public constructors
- *  - of(String name) returns instance of Category
- *  - of(String name) throws IllegalArgumentException if name is null
- *  - field String name should always have uppercase first letter
- *  - instance with same name equals same instance
- */
 public class Category {
 
     private static Map<String, Category> categories = new HashMap<>();
-    private String name;
+    private final String name;
 
     /**
      * Constructor, private.

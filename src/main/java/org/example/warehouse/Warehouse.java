@@ -2,12 +2,15 @@ package org.example.warehouse;
 
 import java.math.BigDecimal;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
- * - should have no public constructors
- * - can be created by calling getInstance(), instance will not save to class.
- * - can be created by calling getIntsance(String name), instance will be saved to map in class.
- *      - should be the same instance when using the same name
+ * Warehouse class
+ * Instances are created by methods getInstance() or getInstance(String name).
+ * Holds product list and changedProduct list.
+ * Methods to add product, change product price, get all products, get product with uuid,
+ * get changed products, get all products mapped with their category, get products with a specific category,
+ * check if warehouse contains any products.
  */
 public class Warehouse {
 
@@ -44,8 +47,9 @@ public class Warehouse {
     public static Warehouse getInstance(String warehouseName) throws IllegalArgumentException {
 
         // Check if name is null or empty
-        if (warehouseName == null)
+        if (warehouseName == null) {
             throw new IllegalArgumentException("Warehouse name can't be null");
+        }
 
         warehouseName = capitalize(warehouseName);
 
@@ -58,29 +62,46 @@ public class Warehouse {
         return warehouses.get(warehouseName);
     }
 
-    public ProductRecord addProduct(UUID uuid, String product, Category category, BigDecimal price) throws IllegalArgumentException {
+    /**
+     * Adds new product to product list in warehouse.
+     * @param uuid UUID: products unique code
+     * @param productName String: products name
+     * @param category Category: product category
+     * @param price BigDecimal: product price
+     * @return ProductRecord: new ProductRecord
+     * @throws IllegalArgumentException if the product list in the warehouse already contains a product with the uuid.
+     */
+    public ProductRecord addProduct(UUID uuid, String productName, Category category, BigDecimal price) throws IllegalArgumentException {
 
-        if (uuid == null){
+        // if getProductByID(uuid) returns an empty Optional if the uuid does not exist in the product-list (will never be null).
+        // if getProductByID(uuid) returns a Optional the uuid exists in the product-list.
+        getProductById(uuid).ifPresent(_ -> {
+            throw new IllegalArgumentException("Product with that id already exists, use updateProduct for updates.");
+        });
+
+        // Checks if uuid == null
+        // (could only be null and not a value in product-list at first loop since previous test throws an exception if present)
+        // second loop it checks if the UUID.randomUUID() has given us a uuid-value that already exists in product-list.
+        while (uuid == null || getProductById(uuid).isPresent()){
             uuid = UUID.randomUUID();
         }
 
-        var hasUUID = products.stream()
-                .map(ProductRecord::uuid)
-                .anyMatch(uuid::equals);
-
-        if (hasUUID){
-            throw new IllegalArgumentException("Product with that id already exists, use updateProduct for updates.");
-        }
-
-        ProductRecord productRecord = new ProductRecord(uuid, product, category, price);
+        // new ProductRecord
+        //      throws new IllegalArgumentException if
+        //          - product (String) is null or empty
+        //          - category (Category) is null
+        //      sets
+        //          - price to 0 if null
+        //          - uuid to uuid.randomUUID() if null
+        ProductRecord productRecord = new ProductRecord(uuid, productName, category, price);
         products.add(productRecord);
 
         return productRecord;
     }
 
     /**
-     * Returns the values from products map as an unmodifiable list.
-     * @return List<ProductRecord>
+     * Returns a copy of the product list as an unmodifiable list.
+     * @return List<ProductRecord>: unmodifiable
      */
     public List<ProductRecord> getProducts() {
         return List.copyOf(products);
@@ -88,8 +109,9 @@ public class Warehouse {
 
     /**
      * Returns product with unique uuid as an Optional<ProductRecord>.
-     * @param uuid UUID: the products unique code.
-     * @return Optional<ProductRecord>: ProductRecord if uuid exists in product map, else empty Optional.
+     * findFirst() will not generate a NullPointerException as no product in the productList will be null (checks in addProduct)
+     * @param uuid UUID: products unique code.
+     * @return Optional<ProductRecord>: ProductRecord if uuid exists in warehouse productList, else empty Optional.
      */
     public Optional<ProductRecord> getProductById(UUID uuid) {
         return products.stream()
@@ -98,54 +120,50 @@ public class Warehouse {
     }
 
     /**
-     * Changes a products price, updates the change in products map and adds the old product to changedProducts list.
-     * @param uuid UUID: products unique code, throws IllegalArgumentException if uuid does not exist.
-     * @param newPrice BigDecimal: the new price.
+     * Changes the price for a product.
+     * Adds the old product to changedProducts list and removes it from product list.
+     * Adds the new product to product list.
+     * @param uuid UUID: products unique code.
+     * @param newPrice BigDecimal: products new price
+     * @throws IllegalArgumentException if product with passed uuid does not exist in product list.
      */
     public void updateProductPrice(UUID uuid, BigDecimal newPrice) throws IllegalArgumentException {
 
-        if(getProductById(uuid).isEmpty()){
-            throw new IllegalArgumentException("Product with that id doesn't exist.");
-        }
-
-        for (ProductRecord productRecord : products) {
-            if (productRecord.uuid().equals(uuid)) {
-                changedProducts.add(productRecord);
-                products.remove(productRecord);
-                addProduct(uuid, productRecord.product(), productRecord.category(), newPrice);
-                break;
-            }
-        }
+        getProductById(uuid).ifPresentOrElse(
+                productRecord -> {
+                    changedProducts.add(productRecord);
+                    products.remove(productRecord);
+                    addProduct(uuid, productRecord.product(), productRecord.category(), newPrice);
+                },
+                () -> {
+                    throw new IllegalArgumentException("Product with that id doesn't exist.");
+                }
+        );
     }
 
+    /**
+     * Returns a copy of the changedProducts list as an unmodifiable list.
+     * @return List<ProductRecord>: unmodifiable
+     */
     public List<ProductRecord> getChangedProducts() {
         return List.copyOf(changedProducts);
     }
 
+    /**
+     * Returns product list as a map grouped by their Category.
+     * @return Map<Category, List<ProductRecord>>:
+     */
     public Map<Category, List<ProductRecord>> getProductsGroupedByCategories() {
-
-        Map<Category, List<ProductRecord>> map = new HashMap<>();
-
-        for( ProductRecord productRecord : products ){
-
-            Category category = productRecord.category();
-
-            if(!map.containsKey(category)){
-                map.put(category, new ArrayList<>());
-            }
-            map.get(category).add(productRecord);
-        }
-
-        return map;
+        return products.stream().collect(Collectors.groupingBy(ProductRecord::category));
     }
 
     /**
-     * find all products belonging to a category"
-     * "find multiple products from same category")
-     * @param category
+     * Returns all products that has the Category of passed parameter as list.
+     * @param category Category: the category of products to get
      * @return List<ProductRecord> : list with products that groups by passed category, else empty list.
      */
     public List<ProductRecord> getProductsBy(Category category) {
+        // getProductsGroupedByCategories() returns the product list as a map grouped by their Categories.
         return getProductsGroupedByCategories().getOrDefault(category, List.of());
     }
 
